@@ -206,6 +206,41 @@ class LatticeGrid {
       }
     }
 
+    void inject_equilibrium_field(const double* target_rho,
+                              const double* ux_field,
+                              const double* uy_field,
+                              double alpha) {
+      if (alpha <= 0.0) return;
+      if (alpha > 1.0) alpha = 1.0;
+
+      static constexpr double w[9] = {
+          4.0 / 9.0,
+          1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0,
+          1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0
+      };
+      static constexpr int ex[9] = {0, 1, -1, 0,  0, 1, -1,  1, -1};
+      static constexpr int ey[9] = {0, 0,  0, 1, -1, 1,  1, -1, -1};
+
+      const double keep = 1.0 - alpha;
+      const int num_cells = width * height;
+
+      for (int idx = 0; idx < num_cells; ++idx) {
+          const double rho_in = target_rho[idx];
+          const double ux = ux_field ? ux_field[idx] : 0.0;
+          const double uy = uy_field ? uy_field[idx] : 0.0;
+          const double u_sq = ux * ux + uy * uy;
+
+          const int base = idx * 9;
+          for (int q = 0; q < 9; ++q) {
+              const double eu = ex[q] * ux + ey[q] * uy;
+              const double feq = w[q] * rho_in * (
+                  1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * u_sq
+              );
+              f_curr[base + q] = keep * f_curr[base + q] + alpha * feq;
+          }
+      }
+    }
+
     // Extract current macroscopic density field across all nodes
     std::vector<double> get_density_field() const {
         std::vector<double> density(width * height, 0.0);

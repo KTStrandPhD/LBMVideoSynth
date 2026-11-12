@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
+#include <stdexcept>
 #include "RGBVideoGrid.hpp"
 
 namespace py = pybind11;
@@ -31,13 +32,34 @@ PYBIND11_MODULE(lbm_video_engine, m) {
         })
         .def("inject_rgb_frame", [](RGBVideoGrid &self,
                                     py::array_t<double, py::array::c_style | py::array::forcecast> frame,
+                                    py::object ux_obj,
+                                    py::object uy_obj,
                                     double alpha,
                                     double contrast) {
             py::buffer_info buf = frame.request();
-            const size_t expected = static_cast<size_t>(self.get_width() * self.get_height() * 3);
-            if (static_cast<size_t>(buf.size) != expected) {
-                throw std::runtime_error("inject_rgb_frame: expected flat or (H, W, 3) array matching grid dimensions");
+            const size_t num_cells = static_cast<size_t>(self.get_width() * self.get_height());
+            if (static_cast<size_t>(buf.size) != num_cells * 3) {
+                throw std::runtime_error("inject_rgb_frame: expected (H, W, 3) array");
             }
-            self.inject_rgb_frame(static_cast<const double*>(buf.ptr), alpha, contrast);
-            }, py::arg("frame"), py::arg("alpha") = 0.08, py::arg("contrast") = 0.35);
+
+            const double* ux_ptr = nullptr;
+            const double* uy_ptr = nullptr;
+            py::array_t<double, py::array::c_style | py::array::forcecast> ux_arr, uy_arr;
+
+            if (!ux_obj.is_none() && !uy_obj.is_none()) {
+                ux_arr = ux_obj.cast<py::array_t<double, py::array::c_style | py::array::forcecast>>();
+                uy_arr = uy_obj.cast<py::array_t<double, py::array::c_style | py::array::forcecast>>();
+                if (static_cast<size_t>(ux_arr.request().size) == num_cells &&
+                    static_cast<size_t>(uy_arr.request().size) == num_cells) {
+                    ux_ptr = static_cast<const double*>(ux_arr.request().ptr);
+                    uy_ptr = static_cast<const double*>(uy_arr.request().ptr);
+                }
+            }
+
+            self.inject_rgb_frame(static_cast<const double*>(buf.ptr), ux_ptr, uy_ptr, alpha, contrast);
+        }, py::arg("frame"),
+           py::arg("ux") = py::none(),
+           py::arg("uy") = py::none(),
+           py::arg("alpha") = 0.25,
+           py::arg("contrast") = 0.45);
 }

@@ -17,7 +17,7 @@
 \date{\today}
 
 \begin{abstract}
-Analog and hybrid video feedback systems generate complex, self-organizing lamellar and labyrinthine patterns that bear a strong morphological resemblance to spinodal decomposition in quenched binary fluid mixtures. In this work, we establish a theoretical and computational bridge between Cahn-Hilliard phase-separation dynamics and discrete-time optical-electronic video feedback loops. We formulate a two-dimensional, nine-velocity (D2Q9) lattice Boltzmann model incorporating a sigmoidal nonlinear collision operator to emulate analog mixer saturation and optical point-spread diffusion, extended to independent red-green-blue (RGB) lattice channels for chromatic dispersion. To replicate physical camera-to-monitor feedback optics and direct tactile manipulation, we integrate inverse-mapped bilinear affine coordinate transformations and localized Gaussian momentum-density perturbations. Furthermore, we present a modular, compile-time polymorphic C++17 software architecture bridged via zero-copy \texttt{pybind11} memory views to a real-time interactive graphical interface.
+Analog and hybrid video feedback systems generate complex, self-organizing lamellar and labyrinthine patterns that bear a strong morphological resemblance to spinodal decomposition in quenched binary fluid mixtures. In this work, we establish a theoretical and computational bridge between Cahn-Hilliard phase-separation dynamics and discrete-time optical-electronic video feedback loops. We formulate a two-dimensional, nine-velocity (D2Q9) lattice Boltzmann model incorporating a sigmoidal nonlinear collision operator to emulate analog mixer saturation and optical point-spread diffusion, extended to independent red-green-blue (RGB) lattice channels for chromatic dispersion. To replicate physical camera-to-monitor feedback optics, live video signal processing, and direct tactile manipulation, we integrate inverse-mapped bilinear affine coordinate transformations, localized Gaussian momentum-density perturbations, and optical-flow-coupled equilibrium video seeding. Furthermore, we present a modular, compile-time polymorphic C++17 software architecture bridged via zero-copy \texttt{pybind11} memory views to a real-time interactive graphical interface.
 \end{abstract}
 
 \maketitle
@@ -28,9 +28,9 @@ Spontaneous pattern formation in far-from-equilibrium systems is a central theme
 
 Remarkably similar morphologies emerge in analog and hybrid video synthesis when an imaging sensor captures the output of a cathode-ray tube (CRT) display routed through a nonlinear video mixer. In such optical-electronic feedback loops, spatial defocusing, phosphor persistence, optical geometric transformations (zoom, rotation, and pan), and electronic voltage saturation interact to amplify specific spatial frequencies while suppressing others. Although practitioners in experimental video synthesis frequently invoke the terminology of spinodal decomposition to describe these striated, finger-like instabilities, a rigorous kinetic formulation mapping video synthesis signal paths onto mesoscopic fluid solvers remains largely unexplored.
 
-The lattice Boltzmann method (LBM) provides an ideal mesoscopic framework for bridging these domains~\cite{succi2001,kruger2017}. Rather than solving macroscopic partial differential equations directly, LBM evolves discrete particle distribution functions on a regular lattice through localized collision and streaming operations. By modifying the collision operator, streaming coordinate mapping, and localized population forcing, LBM naturally accommodates non-ideal saturation transfer functions, optical coordinate warping, and interactive hydrodynamic perturbations.
+The lattice Boltzmann method (LBM) provides an ideal mesoscopic framework for bridging these domains~\cite{succi2001,kruger2017}. Rather than solving macroscopic partial differential equations directly, LBM evolves discrete particle distribution functions on a regular lattice through localized collision and streaming operations. By modifying the collision operator, streaming coordinate mapping, and localized population forcing, LBM naturally accommodates non-ideal saturation transfer functions, optical coordinate warping, live video equilibrium seeding, and interactive hydrodynamic perturbations.
 
-In this paper, we formalize the mathematical correspondence between Cahn-Hilliard spinodal dynamics and video feedback loops, detail a multichannel nonlinear D2Q9 LBM formulation incorporating spatial affine warping and localized perturbations, and outline a policy-based C++ architecture engineered for real-time interactive execution.
+In this paper, we formalize the mathematical correspondence between Cahn-Hilliard spinodal dynamics and video feedback loops, detail a multichannel nonlinear D2Q9 LBM formulation incorporating spatial affine warping, localized perturbations, and optical-flow video seeding, and outline a policy-based C++ architecture engineered for real-time interactive execution.
 
 \section{Theoretical Formulation}
 
@@ -112,7 +112,7 @@ In the interactive control interface, channel relaxation times are mapped from n
 \tau_c = \tau_{\min} + w_c (\tau_{\max} - \tau_{\min}), \qquad c \in \{R, G, B\},
 \label{eq:barycentric_tau}
 \end{equation}
-where $\tau_{\min} = 0.500001 > 1/2$ maintains positive viscosity and numerical stability while $\tau_{\max} = 2.0$ bounds the upper viscous damping regime.
+where $\tau_{\min} = 0.52 > 1/2$ ensures strictly positive viscosity and numerical stability under aggressive optical warping while $\tau_{\max} = 2.0$ bounds the upper viscous damping regime.
 
 \subsection{Spatial Affine Transformations and Local Perturbations}
 
@@ -125,11 +125,27 @@ Source coordinates $\bm{x}_{\mathrm{src}}$ are wrapped periodically onto the dom
 
 Additionally, to support tactile user interaction with the evolving pattern field, localized Gaussian perturbations can be injected at arbitrary cursor coordinates $\bm{x}_p$ with characteristic radius $\sigma_p$. For a local density impulse $\Delta \rho$ and drag-induced velocity $\bm{u}_p$, the population increments $\Delta f_i(\bm{x})$ follow a second-order equilibrium expansion modulated by a Gaussian spatial envelope:
 \begin{multline}
-\Delta f_i(\bm{x}) = w_i \Delta \rho \, e^{-|\bm{x} - \bm{x}_p|^2 / 2\sigma_p^2} \Bigg[ 1 + \frac{\bm{c}_i \cdot \bm{u}_p}{c_s^2} \\
+\Delta f_i(\bm{x}) = w_i \Delta \rho \, e^{-\|\bm{x} - \bm{x}_p\|^2 / 2\sigma_p^2} \Bigg[ 1 + \frac{\bm{c}_i \cdot \bm{u}_p}{c_s^2} \\
 + \frac{(\bm{c}_i \cdot \bm{u}_p)^2}{2c_s^4} - \frac{\bm{u}_p \cdot \bm{u}_p}{2c_s^2} \Bigg].
 \label{eq:local_perturbation}
 \end{multline}
 Positive $\Delta \rho$ values inject expanding luminance ripples, negative values carve dark cavities into existing lamellar domains, and nonzero $\bm{u}_p$ vectors shear the fluid along the user's cursor trajectory.
+
+\subsection{External Video Seeding and Optical-Flow Momentum Coupling}
+
+Beyond autonomous noise-seeded synthesis, the solver can operate as a real-time analog video processor by coupling incoming webcam or prerecorded video frames directly into the mesoscopic populations. Normalized pixel intensities $I_c(\bm{x}, t) \in [0, 1]$ for channel $c \in \{R, G, B\}$ are mapped to target lattice densities centered around the quiescent background $\rho_0 = 1$:
+\begin{equation}
+\rho_{\mathrm{vid}, c}(\bm{x}, t) = 1 + \gamma \left( I_c(\bm{x}, t) - \frac{1}{2} \right),
+\label{eq:video_density}
+\end{equation}
+where $\gamma$ controls luminance-to-density contrast. Concurrently, inter-frame pixel displacements extracted via dense Farneback optical flow~\cite{farneback2003} are rescaled and clamped below the low-Mach compressibility threshold ($|\bm{u}_{\mathrm{flow}}| \le 0.15$) to form a physical velocity field $\bm{u}_{\mathrm{flow}}(\bm{x}, t)$.
+
+Prior to collision, the lattice populations are relaxed toward the video-driven local equilibrium $f_i^{\mathrm{eq}}(\rho_{\mathrm{vid}, c}, \bm{u}_{\mathrm{flow}})$ with tunable coupling weight $\alpha \in [0, 1]$:
+\begin{equation}
+f_i(\bm{x}, t) \leftarrow (1 - \alpha) f_i(\bm{x}, t) + \alpha f_i^{\mathrm{eq}}\left(\rho_{\mathrm{vid}, c}(\bm{x}, t), \bm{u}_{\mathrm{flow}}(\bm{x}, t)\right).
+\label{eq:video_equilibrium_blend}
+\end{equation}
+Intermediate values ($\alpha \approx 0.1\text{--}0.5$) blend live subject contours and motion-induced momentum wakes with multi-frame LBM feedback memory, whereas setting $\alpha = 1.0$ for a single frame initializes the exact fluid state from live imagery and allows it to decompose purely under LBM kinetics.
 
 \section{Computational Architecture}
 
@@ -139,9 +155,9 @@ To achieve modularity without sacrificing computational throughput, we structure
 \begin{equation}
 \texttt{LatticeGrid<CollisionPolicy, ForcingPolicy>},
 \end{equation}
-wrapped at the multi-channel level by \texttt{RGBVideoGrid}, which orchestrates synchronous time-stepping, affine warping (\texttt{AffineTransform.hpp}), and localized perturbations across the red, green, and blue grids while reusing preallocated scratch buffers to eliminate per-frame heap allocations.
+wrapped at the multi-channel level by \texttt{RGBVideoGrid}, which orchestrates synchronous time-stepping, affine warping (\texttt{AffineTransform.hpp}), localized perturbations, and equilibrium video injection across the red, green, and blue grids while reusing preallocated scratch buffers to eliminate per-frame heap allocations.
 
-To bridge high-performance C++ execution with rapid visualization and user interaction, the engine is exposed to Python via custom \texttt{pybind11} bindings. Interleaved RGB density fields are passed directly to NumPy array views, enabling a lightweight Pygame graphical user interface to render real-time simulations at $60\text{ Hz}$ while dynamically adjusting barycentric $\tau$ weights, affine warp parameters, and mouse-driven hydrodynamic pokes.
+To bridge high-performance C++ execution with rapid visualization and user interaction, the engine is exposed to Python via custom \texttt{pybind11} bindings. Interleaved RGB density fields and incoming optical-flow arrays are passed directly via zero-copy NumPy buffer views, enabling a dynamically resizable Pygame graphical user interface to render real-time simulations while adjusting barycentric $\tau$ weights, affine warp parameters, live camera coupling $\alpha$, and mouse-driven hydrodynamic pokes.
 
 \section{Preliminary Numerical Results}
 
@@ -159,22 +175,23 @@ Feedback gain & $g_{\mathrm{fb}}$ & $1.05$ \\
 Saturation limit & $L_{\mathrm{sat}}$ & $1.50$ \\
 Initial perturbation amplitude & $\delta \rho$ & $0.03$ \\
 Affine zoom / rotation rate & $z, \theta$ & $1.005, 0.008\text{ rad}$ \\
+Video coupling blend weight & $\alpha$ & $[0.0, 1.0]$ \\
 \end{tabular}
 \end{ruledtabular}
 \end{table}
 
-Table~\ref{tab:sim_params} details the kinetic and optical parameters selected to resolve early-stage coarsening and continuous vortex feedback. Setting the baseline relaxation time to $\tau = 0.85$ moderates viscous damping and diffusive transport, while a gentle feedback gain ($g_{\mathrm{fb}} = 1.05$) prevents immediate numerical clipping. High-frequency spatial noise undergoes local diffusive smoothing governed by the D2Q9 viscosity $\nu = c_s^2 (\tau - 1/2)$, followed by nonlinear amplification of intermediate wavelengths.
+Table~\ref{tab:sim_params} details the kinetic and optical parameters selected to resolve early-stage coarsening, continuous vortex feedback, and live video coupling. Setting the baseline relaxation time to $\tau = 0.85$ moderates viscous damping and diffusive transport, while a gentle feedback gain ($g_{\mathrm{fb}} = 1.05$) prevents immediate numerical clipping. High-frequency spatial noise undergoes local diffusive smoothing governed by the D2Q9 viscosity $\nu = c_s^2 (\tau - 1/2)$, followed by nonlinear amplification of intermediate wavelengths.
 
-When coupled with distinct channel relaxation times $(\tau_R, \tau_G, \tau_B)$ and subtle outward affine magnification ($z = 1.005$, $\theta = 0.008\text{ rad/step}$), isotropic snowy fluctuations coalesce into spiraling, polychromatic phase domains that continuously advect outward from the optical center while responding instantaneously to localized mouse-driven density and momentum impulses.
+When coupled with distinct channel relaxation times $(\tau_R, \tau_G, \tau_B)$ and subtle outward affine magnification ($z = 1.005$, $\theta = 0.008\text{ rad/step}$), isotropic fluctuations coalesce into spiraling, polychromatic phase domains that continuously advect outward from the optical center. Introducing live video frames and Farneback optical-flow velocities via Eq.~(\ref{eq:video_equilibrium_blend}) injects coherent density silhouettes and momentum wakes that shear existing lamellar domains and nucleate secondary spinodal filaments along moving edges.
 
 \section{Conclusion and Future Work}
 
-We have established a theoretical and numerical framework translating analog video feedback synthesis into a multichannel nonlinear D2Q9 lattice Boltzmann model. By embedding a sigmoidal saturation operator, inverse-mapped bilinear affine coordinate transformations, and Gaussian momentum-density perturbation kernels within a compile-time polymorphic C++17 architecture bridged to Python via \texttt{pybind11}, the prototype achieves real-time interactive video synthesis with rich chromatic dispersion and tactile fluid control.
+We have established a theoretical and numerical framework translating analog video feedback synthesis into a multichannel nonlinear D2Q9 lattice Boltzmann model. By embedding a sigmoidal saturation operator, inverse-mapped bilinear affine coordinate transformations, Gaussian momentum-density perturbation kernels, and optical-flow-coupled equilibrium video seeding within a compile-time polymorphic C++17 architecture bridged to Python via \texttt{pybind11}, the prototype achieves real-time interactive video synthesis and live visual processing.
 
-With the core real-time synthesizer, RGB triangle picker, affine optical warping, and interactive poking mechanics operational, future development will focus on two remaining directions:
+Future development will focus on two primary extensions:
 \begin{enumerate}
-    \item \textbf{Live External Video \& Webcam Seeding:} Streaming real-time frames from USB cameras or video files into the macroscopic density or external forcing fields $\bm{F}_i(\bm{x}, t)$ to process live imagery through the LBM feedback loop.
-    \item \textbf{GPU \& Compute Shader Acceleration:} Offloading the D2Q9 collision, streaming, and bilinear affine interpolation kernels to CUDA or WebGPU compute shaders to support high-definition ($1080p$ to $4K$) real-time synthesis and enforce strict Mach-number stability limits at extreme parameter regimes.
+    \item \textbf{GPU \& Compute Shader Acceleration:} Offloading the D2Q9 collision, streaming, and bilinear affine interpolation kernels to CUDA or WebGPU compute shaders to support high-definition ($1080p$ to $4K$) real-time synthesis at locked $60\text{ Hz}$ frame rates.
+    \item \textbf{Audio-Reactive \& Spectral Forcing:} Coupling real-time fast Fourier transform (FFT) audio frequency bands to relaxation times $\tau_c$, affine zoom/rotation rates, and spatially modulated forcing fields $\bm{F}_i(\bm{x}, t)$ for live audiovisual performance.
 \end{enumerate}
 
 \begin{thebibliography}{9}
@@ -187,6 +204,9 @@ S. Succi, \textit{The Lattice Boltzmann Equation for Fluid Dynamics and Beyond} 
 
 \bibitem{kruger2017}
 T. Kr\"uger, H. Kusumaatmaja, A. Kuzmin, O. Shardt, G. Silva, and E. M. Viggen, \textit{The Lattice Boltzmann Method: Principles and Practice} (Springer, Cham, 2017).
+
+\bibitem{farneback2003}
+G. Farneb\"ack, Two-Frame Motion Estimation Based on Polynomial Expansion, in \textit{Image Analysis}, Lecture Notes in Computer Science, Vol. 2749 (Springer, Berlin, 2003), pp. 363--370.
 
 \end{thebibliography}
 

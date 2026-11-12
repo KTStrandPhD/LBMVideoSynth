@@ -59,7 +59,11 @@ public:
         }
     }
 
-    void inject_rgb_frame(const double* rgb_norm, double alpha, double contrast = 0.35) {
+    void inject_rgb_frame(const double* rgb_norm,
+                      const double* ux_field,
+                      const double* uy_field,
+                      double alpha,
+                      double contrast = 0.45) {
       if (alpha <= 0.0) return;
 
       const size_t num_cells = static_cast<size_t>(width) * static_cast<size_t>(height);
@@ -73,9 +77,9 @@ public:
           rho_b[i] = 1.0 + contrast * (rgb_norm[i * 3 + 2] - 0.5);
       }
 
-      grid_r.inject_density_field(rho_r.data(), alpha);
-      grid_g.inject_density_field(rho_g.data(), alpha);
-      grid_b.inject_density_field(rho_b.data(), alpha);
+      grid_r.inject_equilibrium_field(rho_r.data(), ux_field, uy_field, alpha);
+      grid_g.inject_equilibrium_field(rho_g.data(), ux_field, uy_field, alpha);
+      grid_b.inject_equilibrium_field(rho_b.data(), ux_field, uy_field, alpha);
     }
 
     void set_relaxation_times(double tau_r, double tau_g, double tau_b) {
