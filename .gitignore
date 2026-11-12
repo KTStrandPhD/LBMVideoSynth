@@ -1,0 +1,50 @@
+# C++ & pybind11 Build Artifacts
+build/
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# Python Cache & Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# LaTeX Build Artifacts (keeps .tex source tracked)
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*Notes.bib
+# Uncomment below if you prefer not to track compiled PDFs in Git:
+# *.pdf
+
+# Rendered Video & Image Outputs (prevents binary repo bloat)
+testoutput/*.mp4
+testoutput/*.gif
+testoutput/*.avi
+testoutput/*.png
+testoutput/*.jpg
+
+# Backups & Editor Swap Files
+*_backup
+*.bak
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+.DS_Store

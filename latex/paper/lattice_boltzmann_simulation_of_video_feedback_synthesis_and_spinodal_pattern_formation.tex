@@ -1,0 +1,193 @@
+\documentclass[aps,pre,twocolumn,showpacs,superscriptaddress,floatfix]{revtex4-2}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{Nonlinear Lattice Boltzmann Formulation for Analog Video Synthesis and Spinodal-Like Pattern Formation}
+
+\author{Kyle}
+\affiliation{Computational Physics and Nonlinear Dynamics Research}
+
+\date{\today}
+
+\begin{abstract}
+Analog and hybrid video feedback systems generate complex, self-organizing lamellar and labyrinthine patterns that bear a strong morphological resemblance to spinodal decomposition in quenched binary fluid mixtures. In this work, we establish a theoretical and computational bridge between Cahn-Hilliard phase-separation dynamics and discrete-time optical-electronic video feedback loops. We formulate a two-dimensional, nine-velocity (D2Q9) lattice Boltzmann model incorporating a sigmoidal nonlinear collision operator to emulate analog mixer saturation and optical point-spread diffusion, extended to independent red-green-blue (RGB) lattice channels for chromatic dispersion. To replicate physical camera-to-monitor feedback optics and direct tactile manipulation, we integrate inverse-mapped bilinear affine coordinate transformations and localized Gaussian momentum-density perturbations. Furthermore, we present a modular, compile-time polymorphic C++17 software architecture bridged via zero-copy \texttt{pybind11} memory views to a real-time interactive graphical interface.
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+
+Spontaneous pattern formation in far-from-equilibrium systems is a central theme across condensed matter physics, fluid dynamics, and nonlinear optics. In multiphase fluid dynamics, spinodal decomposition occurs when a homogeneous binary mixture is rapidly quenched into a thermodynamically unstable region of its phase diagram~\cite{cahn1958}. Driven by uphill diffusion, infinitesimal compositional fluctuations grow exponentially at a characteristic wavelength, yielding interconnected, bicontinuous domains that coarsen over time.
+
+Remarkably similar morphologies emerge in analog and hybrid video synthesis when an imaging sensor captures the output of a cathode-ray tube (CRT) display routed through a nonlinear video mixer. In such optical-electronic feedback loops, spatial defocusing, phosphor persistence, optical geometric transformations (zoom, rotation, and pan), and electronic voltage saturation interact to amplify specific spatial frequencies while suppressing others. Although practitioners in experimental video synthesis frequently invoke the terminology of spinodal decomposition to describe these striated, finger-like instabilities, a rigorous kinetic formulation mapping video synthesis signal paths onto mesoscopic fluid solvers remains largely unexplored.
+
+The lattice Boltzmann method (LBM) provides an ideal mesoscopic framework for bridging these domains~\cite{succi2001,kruger2017}. Rather than solving macroscopic partial differential equations directly, LBM evolves discrete particle distribution functions on a regular lattice through localized collision and streaming operations. By modifying the collision operator, streaming coordinate mapping, and localized population forcing, LBM naturally accommodates non-ideal saturation transfer functions, optical coordinate warping, and interactive hydrodynamic perturbations.
+
+In this paper, we formalize the mathematical correspondence between Cahn-Hilliard spinodal dynamics and video feedback loops, detail a multichannel nonlinear D2Q9 LBM formulation incorporating spatial affine warping and localized perturbations, and outline a policy-based C++ architecture engineered for real-time interactive execution.
+
+\section{Theoretical Formulation}
+
+\subsection{Spinodal Decomposition vs. Video Feedback}
+
+In classical continuum thermodynamics, the evolution of a conserved order parameter $c(\bm{x}, t)$ in a binary mixture is governed by the Cahn-Hilliard equation:
+\begin{equation}
+\frac{\partial c}{\partial t} = \nabla \cdot \left[ M \nabla \left( \frac{\partial f(c)}{\partial c} - \kappa \nabla^2 c \right) \right],
+\label{eq:cahn_hilliard}
+\end{equation}
+where $M$ is the mobility, $f(c)$ is the bulk Helmholtz free-energy density, and $\kappa$ is the interfacial gradient energy coefficient penalizing sharp compositional transitions. When quenched into the spinodal region where $f''(c_0) < 0$, linear stability analysis predicts a fastest-growing unstable mode with characteristic wavelength
+\begin{equation}
+\lambda_m = 2\pi \sqrt{\frac{-2\kappa}{f''(c_0)}}.
+\label{eq:wavelength}
+\end{equation}
+
+In an optical-electronic video feedback system, a two-dimensional luminance or color intensity field $I(\bm{x}, t)$ evolves across discrete frame intervals $\Delta t$ according to the map:
+\begin{equation}
+I(\bm{x}, t + \Delta t) = \mathcal{N}\left( (\mathcal{K} * I)(\mathcal{T}^{-1}(\bm{x}), t) + \eta(\bm{x}, t) \right),
+\label{eq:video_feedback}
+\end{equation}
+where $\mathcal{K}(\bm{x})$ denotes the spatial point-spread function (PSF) arising from camera lens defocus, sensor pixel pitch integration, and CRT phosphor persistence; $*$ denotes spatial convolution; $\mathcal{T}^{-1}(\bm{x})$ represents the inverse optical coordinate mapping from camera rotation, zoom, and offset; $\eta(\bm{x}, t)$ represents external video inputs or stochastic thermal noise; and $\mathcal{N}(\cdot)$ is a smooth sigmoidal transfer function modeling amplifier gain and voltage-rail saturation.
+
+Expanding the convolution $(\mathcal{K} * I)$ for an isotropic Gaussian PSF of width $\sigma$ to second order in spatial gradients yields a diffusive smoothing operator:
+\begin{equation}
+(\mathcal{K} * I)(\bm{x}, t) \approx I(\bm{x}, t) + \frac{\sigma^2}{2} \nabla^2 I(\bm{x}, t),
+\label{eq:psf_expansion}
+\end{equation}
+which plays a stabilizing, dissipative role analogous to the interfacial gradient penalty $\kappa \nabla^2 c$ in Eq.~(\ref{eq:cahn_hilliard}). Simultaneously, high-gain sigmoidal amplification $\mathcal{N}$ destabilizes uniform gray levels, driving intensity values toward upper and lower saturation bounds while generating harmonic spatial ripples.
+
+\subsection{Nonlinear D2Q9 Lattice Boltzmann Model}
+
+To simulate these coupled diffusive and nonlinear amplification dynamics on a two-dimensional Cartesian grid, we employ the isotropic D2Q9 lattice velocity set. The discrete velocities $\bm{c}_i$ ($i = 0, \dots, 8$) and their corresponding lattice weights $w_i$ are summarized in Table~\ref{tab:d2q9_params}.
+
+\begin{table}[t]
+\caption{Discrete velocity vectors $\bm{c}_i = (c_{ix}, c_{iy})$ and isotropic lattice weights $w_i$ for the D2Q9 model.}
+\label{tab:d2q9_params}
+\begin{ruledtabular}
+\begin{tabular}{ccc}
+Index $i$ & Velocity Vector $\bm{c}_i$ & Lattice Weight $w_i$ \\
+\hline
+$0$ & $(0, 0)$ & $4/9$ \\
+$1, 2, 3, 4$ & $(\pm 1, 0), (0, \pm 1)$ & $1/9$ \\
+$5, 6, 7, 8$ & $(\pm 1, \pm 1)$ & $1/36$ \\
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+Macroscopic pixel density $\rho(\bm{x}, t)$ and advective velocity $\bm{u}(\bm{x}, t)$ are recovered from the moments of the single-particle distribution functions $f_i(\bm{x}, t)$:
+\begin{equation}
+\rho = \sum_{i=0}^{8} f_i, \qquad \rho \bm{u} = \sum_{i=0}^{8} f_i \bm{c}_i.
+\label{eq:moments}
+\end{equation}
+The local Maxwell-Boltzmann equilibrium distribution $f_i^{\mathrm{eq}}$ is given by
+\begin{equation}
+f_i^{\mathrm{eq}}(\rho, \bm{u}) = w_i \rho \left[ 1 + \frac{\bm{c}_i \cdot \bm{u}}{c_s^2} + \frac{(\bm{c}_i \cdot \bm{u})^2}{2c_s^4} - \frac{\bm{u} \cdot \bm{u}}{2c_s^2} \right],
+\label{eq:equilibrium}
+\end{equation}
+where $c_s^2 = 1/3$ is the squared lattice speed of sound in lattice units ($\Delta x = \Delta t = 1$).
+
+In standard Bhatnagar-Gross-Krook (BGK) kinetics, populations relax toward local equilibrium at rate $\omega = 1/\tau$. To emulate analog video mixer saturation within the mesoscopic collision step, we define a nonlinear post-collision state $f_i^{\star}$:
+\begin{multline}
+f_i^{\star}(\bm{x}, t) = L_{\mathrm{sat}} \tanh\Bigg( \frac{g_{\mathrm{fb}}}{L_{\mathrm{sat}}} \Big[ f_i(\bm{x}, t) \\
+- \omega \left( f_i(\bm{x}, t) - f_i^{\mathrm{eq}}(\bm{x}, t) \right) \Big] \Bigg),
+\label{eq:nonlinear_collision}
+\end{multline}
+where $g_{\mathrm{fb}}$ is the dimensionless feedback gain and $L_{\mathrm{sat}}$ sets the asymptotic saturation ceiling. Following collision and optional external forcing $F_i$, populations propagate to neighboring nodes via periodic pull-streaming:
+\begin{equation}
+\tilde{f}_i(\bm{x} + \bm{c}_i \Delta t, t + \Delta t) = f_i^{\star}(\bm{x}, t) + F_i(\bm{x}, t).
+\label{eq:streaming}
+\end{equation}
+
+\subsection{Multichannel RGB Dynamics and Barycentric Control}
+
+To synthesize full-color analog video dynamics, three independent D2Q9 lattices evolve concurrently for the red, green, and blue color channels, parameterized by distinct relaxation times $\tau_c$ ($c \in \{R, G, B\}$). Because the effective kinematic viscosity $\nu_c = c_s^2(\tau_c - 1/2)$ governs the characteristic coarsening rate and spatial diffusion length of each channel, unequal relaxation times induce differential domain growth and chromatic fringing along phase boundaries.
+
+In the interactive control interface, channel relaxation times are mapped from normalized barycentric coordinates $(w_R, w_G, w_B)$ selected on an equilateral RGB color triangle:
+\begin{equation}
+\tau_c = \tau_{\min} + w_c (\tau_{\max} - \tau_{\min}), \qquad c \in \{R, G, B\},
+\label{eq:barycentric_tau}
+\end{equation}
+where $\tau_{\min} = 0.500001 > 1/2$ maintains positive viscosity and numerical stability while $\tau_{\max} = 2.0$ bounds the upper viscous damping regime.
+
+\subsection{Spatial Affine Transformations and Local Perturbations}
+
+To emulate physical optical feedback—where a camera rotated by angle $\theta$, scaled by magnification factor $z$, and translated by $\bm{b} = (b_x, b_y)$ views its own output monitor—we apply an inverse-mapped affine transformation to the post-streaming populations $\tilde{f}_i$ around the grid center $\bm{x}_0$:
+\begin{equation}
+\bm{x}_{\mathrm{src}} = \frac{1}{z} \begin{pmatrix} \cos\theta & \sin\theta \\ -\sin\theta & \cos\theta \end{pmatrix} (\bm{x} - \bm{x}_0) + \bm{x}_0 - \bm{b}.
+\label{eq:affine_inverse}
+\end{equation}
+Source coordinates $\bm{x}_{\mathrm{src}}$ are wrapped periodically onto the domain $[0, N_x) \times [0, N_y)$ and evaluated via bilinear interpolation across the four surrounding lattice nodes for each discrete velocity direction $i \in \{0, \dots, 8\}$. Evaluating the transform via pull-mapping preserves mass conservation across periodic boundaries and prevents pixel tearing under continuous rotation and zoom.
+
+Additionally, to support tactile user interaction with the evolving pattern field, localized Gaussian perturbations can be injected at arbitrary cursor coordinates $\bm{x}_p$ with characteristic radius $\sigma_p$. For a local density impulse $\Delta \rho$ and drag-induced velocity $\bm{u}_p$, the population increments $\Delta f_i(\bm{x})$ follow a second-order equilibrium expansion modulated by a Gaussian spatial envelope:
+\begin{multline}
+\Delta f_i(\bm{x}) = w_i \Delta \rho \, e^{-|\bm{x} - \bm{x}_p|^2 / 2\sigma_p^2} \Bigg[ 1 + \frac{\bm{c}_i \cdot \bm{u}_p}{c_s^2} \\
++ \frac{(\bm{c}_i \cdot \bm{u}_p)^2}{2c_s^4} - \frac{\bm{u}_p \cdot \bm{u}_p}{2c_s^2} \Bigg].
+\label{eq:local_perturbation}
+\end{multline}
+Positive $\Delta \rho$ values inject expanding luminance ripples, negative values carve dark cavities into existing lamellar domains, and nonzero $\bm{u}_p$ vectors shear the fluid along the user's cursor trajectory.
+
+\section{Computational Architecture}
+
+Real-time video synthesis requires executing millions of lattice updates per second across three color channels to maintain interactive frame rates ($\ge 60\text{ Hz}$). Traditional object-oriented plugin architectures rely on runtime polymorphism via virtual function tables, which inhibits compiler inlining and introduces branch prediction penalties inside tight $O(N_x N_y)$ spatial loops.
+
+To achieve modularity without sacrificing computational throughput, we structure the core simulation engine (\texttt{VideoSynthLBM}) using compile-time policy-based template design in C++17. The core grid solver is parameterized over independent policy classes governing collision kinetics and external forcing:
+\begin{equation}
+\texttt{LatticeGrid<CollisionPolicy, ForcingPolicy>},
+\end{equation}
+wrapped at the multi-channel level by \texttt{RGBVideoGrid}, which orchestrates synchronous time-stepping, affine warping (\texttt{AffineTransform.hpp}), and localized perturbations across the red, green, and blue grids while reusing preallocated scratch buffers to eliminate per-frame heap allocations.
+
+To bridge high-performance C++ execution with rapid visualization and user interaction, the engine is exposed to Python via custom \texttt{pybind11} bindings. Interleaved RGB density fields are passed directly to NumPy array views, enabling a lightweight Pygame graphical user interface to render real-time simulations at $60\text{ Hz}$ while dynamically adjusting barycentric $\tau$ weights, affine warp parameters, and mouse-driven hydrodynamic pokes.
+
+\section{Preliminary Numerical Results}
+
+\begin{table}[t]
+\caption{Simulation parameters for baseline slow-evolution video synthesis runs.}
+\label{tab:sim_params}
+\begin{ruledtabular}
+\begin{tabular}{lcc}
+Parameter & Symbol & Value \\
+\hline
+Grid resolution & $N_x \times N_y$ & $256 \times 256$ \\
+Baseline relaxation time & $\tau$ & $0.85$ \\
+Relaxation frequency & $\omega$ & $1.176$ \\
+Feedback gain & $g_{\mathrm{fb}}$ & $1.05$ \\
+Saturation limit & $L_{\mathrm{sat}}$ & $1.50$ \\
+Initial perturbation amplitude & $\delta \rho$ & $0.03$ \\
+Affine zoom / rotation rate & $z, \theta$ & $1.005, 0.008\text{ rad}$ \\
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+Table~\ref{tab:sim_params} details the kinetic and optical parameters selected to resolve early-stage coarsening and continuous vortex feedback. Setting the baseline relaxation time to $\tau = 0.85$ moderates viscous damping and diffusive transport, while a gentle feedback gain ($g_{\mathrm{fb}} = 1.05$) prevents immediate numerical clipping. High-frequency spatial noise undergoes local diffusive smoothing governed by the D2Q9 viscosity $\nu = c_s^2 (\tau - 1/2)$, followed by nonlinear amplification of intermediate wavelengths.
+
+When coupled with distinct channel relaxation times $(\tau_R, \tau_G, \tau_B)$ and subtle outward affine magnification ($z = 1.005$, $\theta = 0.008\text{ rad/step}$), isotropic snowy fluctuations coalesce into spiraling, polychromatic phase domains that continuously advect outward from the optical center while responding instantaneously to localized mouse-driven density and momentum impulses.
+
+\section{Conclusion and Future Work}
+
+We have established a theoretical and numerical framework translating analog video feedback synthesis into a multichannel nonlinear D2Q9 lattice Boltzmann model. By embedding a sigmoidal saturation operator, inverse-mapped bilinear affine coordinate transformations, and Gaussian momentum-density perturbation kernels within a compile-time polymorphic C++17 architecture bridged to Python via \texttt{pybind11}, the prototype achieves real-time interactive video synthesis with rich chromatic dispersion and tactile fluid control.
+
+With the core real-time synthesizer, RGB triangle picker, affine optical warping, and interactive poking mechanics operational, future development will focus on two remaining directions:
+\begin{enumerate}
+    \item \textbf{Live External Video \& Webcam Seeding:} Streaming real-time frames from USB cameras or video files into the macroscopic density or external forcing fields $\bm{F}_i(\bm{x}, t)$ to process live imagery through the LBM feedback loop.
+    \item \textbf{GPU \& Compute Shader Acceleration:} Offloading the D2Q9 collision, streaming, and bilinear affine interpolation kernels to CUDA or WebGPU compute shaders to support high-definition ($1080p$ to $4K$) real-time synthesis and enforce strict Mach-number stability limits at extreme parameter regimes.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem{cahn1958}
+J. W. Cahn and J. E. Hilliard, Free Energy of a Nonuniform System. I. Interfacial Free Energy, J. Chem. Phys. \textbf{28}, 258 (1958).
+
+\bibitem{succi2001}
+S. Succi, \textit{The Lattice Boltzmann Equation for Fluid Dynamics and Beyond} (Oxford University Press, Oxford, 2001).
+
+\bibitem{kruger2017}
+T. Kr\"uger, H. Kusumaatmaja, A. Kuzmin, O. Shardt, G. Silva, and E. M. Viggen, \textit{The Lattice Boltzmann Method: Principles and Practice} (Springer, Cham, 2017).
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,9 @@
+1. refresh me on what what the interfacial graident penalty comes from and what it means. i remember this from grad school, but haven't needed to be aware of it since then.
+
+2. in the characteristic wavelength, is f''(c_0) the second derivative of the distribution functions from the boltzmann equation implemented at an initial composition? Refresh me on this background
+
+3. is N, the sigmoidal thresholding nonlinearity, is that essentially just a binary on off switch? for example, in a heaviside step function, you have a low and high side. is the threshold that difference between the max and min? how does that work in for a sigmoid like the error function that is non linear?
+
+4. Explain K, the point-spread function in more detail. give a mathematical representation and examples.
+
+5. can you provide links to additional resources on video synthesis?

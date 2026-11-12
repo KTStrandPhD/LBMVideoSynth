@@ -1,0 +1,15 @@
++-------------------------------------------------------------+
+|                       PYTHON FRONTEND                       |
+|  - Pygame / ModernGL Window & Real-Time Display (60 FPS)   |
+|  - GUI Sliders (Feedback Gain, Blur Radius, Relaxation Rate)|
+|  - Sends parameters to C++ via pybind11 bindings            |
++------------------------------^------------------------------+
+                               | Zero-Copy Buffer Sharing
+                               | (NumPy view directly on C++ memory)
++------------------------------v------------------------------+
+|                        C++ BACKEND                          |
+|  - D2Q9 LBM Lattice Solver (Streaming & Collision)          |
+|  - Shan-Chen / Free-Energy Multiphase Interaction           |
+|  - Point-Spread Function (Convolution Blur Kernel)          |
+|  - Sigmoidal Nonlinear Activation & Frame Buffer Delay      |
++-------------------------------------------------------------+
