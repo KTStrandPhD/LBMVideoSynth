@@ -184,6 +184,28 @@ class LatticeGrid {
       std::swap(f_curr, f_warp_buf);
     }
 
+    void inject_density_field(const double* target_rho, double alpha) {
+      if (alpha <= 0.0) return;
+      if (alpha > 1.0) alpha = 1.0;
+
+      static constexpr double w[9] = {
+          4.0 / 9.0,
+          1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0,
+          1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0
+      };
+
+      const double keep = 1.0 - alpha;
+      const int num_cells = width * height;
+
+      for (int idx = 0; idx < num_cells; ++idx) {
+          const double rho_in = target_rho[idx];
+          const int base = idx * 9;
+          for (int q = 0; q < 9; ++q) {
+              f_curr[base + q] = keep * f_curr[base + q] + alpha * w[q] * rho_in;
+          }
+      }
+    }
+
     // Extract current macroscopic density field across all nodes
     std::vector<double> get_density_field() const {
         std::vector<double> density(width * height, 0.0);

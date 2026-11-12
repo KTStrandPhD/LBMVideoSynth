@@ -28,5 +28,16 @@ PYBIND11_MODULE(lbm_video_engine, m) {
         .def("get_rgb_density_field", [](const RGBVideoGrid &self) {
             auto rgb = self.get_rgb_density_field();
             return py::array_t<double>(rgb.size(), rgb.data());
-        });
+        })
+        .def("inject_rgb_frame", [](RGBVideoGrid &self,
+                                    py::array_t<double, py::array::c_style | py::array::forcecast> frame,
+                                    double alpha,
+                                    double contrast) {
+            py::buffer_info buf = frame.request();
+            const size_t expected = static_cast<size_t>(self.get_width() * self.get_height() * 3);
+            if (static_cast<size_t>(buf.size) != expected) {
+                throw std::runtime_error("inject_rgb_frame: expected flat or (H, W, 3) array matching grid dimensions");
+            }
+            self.inject_rgb_frame(static_cast<const double*>(buf.ptr), alpha, contrast);
+            }, py::arg("frame"), py::arg("alpha") = 0.08, py::arg("contrast") = 0.35);
 }

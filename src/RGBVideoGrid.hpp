@@ -59,11 +59,33 @@ public:
         }
     }
 
+    void inject_rgb_frame(const double* rgb_norm, double alpha, double contrast = 0.35) {
+      if (alpha <= 0.0) return;
+
+      const size_t num_cells = static_cast<size_t>(width) * static_cast<size_t>(height);
+      std::vector<double> rho_r(num_cells);
+      std::vector<double> rho_g(num_cells);
+      std::vector<double> rho_b(num_cells);
+
+      for (size_t i = 0; i < num_cells; ++i) {
+          rho_r[i] = 1.0 + contrast * (rgb_norm[i * 3 + 0] - 0.5);
+          rho_g[i] = 1.0 + contrast * (rgb_norm[i * 3 + 1] - 0.5);
+          rho_b[i] = 1.0 + contrast * (rgb_norm[i * 3 + 2] - 0.5);
+      }
+
+      grid_r.inject_density_field(rho_r.data(), alpha);
+      grid_g.inject_density_field(rho_g.data(), alpha);
+      grid_b.inject_density_field(rho_b.data(), alpha);
+    }
+
     void set_relaxation_times(double tau_r, double tau_g, double tau_b) {
         grid_r.set_relaxation_time(tau_r);
         grid_g.set_relaxation_time(tau_g);
         grid_b.set_relaxation_time(tau_b);
     }
+
+    int get_width() const { return width; }
+    int get_height() const { return height; }
 
     // Interleave R, G, B density fields into a single flat buffer (Size: Width * Height * 3)
     std::vector<double> get_rgb_density_field() const {
